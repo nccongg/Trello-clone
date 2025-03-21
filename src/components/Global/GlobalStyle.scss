@@ -1,0 +1,43 @@
+@import 'normalize.css';
+
+:root {
+  --primary-color: #9333ea;
+  --primary-hover-color: #6e1fb8;
+
+  --black: black;
+  --white: white;
+  --text-color: #333;
+  --bg-color: #111827;
+  --bg-item-color: #27272c;
+  --bg-albums-color: #1f2937;
+  --bg-albums-hover-color: #374151;
+  --text-description-color: rgba(255, 255, 255, 0.6);
+  --line-color: rgba(77, 76, 76, 0.6);
+  // Default layout
+  --default-layout-header-height: 60px;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 62.5%;
+}
+
+body {
+  // font-family: 'JetBrains Mono', monospace;
+  font-family: 'Roboto', monospace;
+  font-size: 1.8rem;
+  line-height: 1.5;
+  text-rendering: optimizeSpeed;
+  background-color: var(--bg-color);
+}
+
+span,
+h1 {
+  margin: 0;
+  padding: 0;
+}
