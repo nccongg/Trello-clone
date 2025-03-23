@@ -1,31 +1,16 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { publicRoutes } from './routes/routes';
-
-import { useEffect } from 'react';
-// import DefaultLayout from './components/Layouts/DefaultLayout';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import HomePage from './pages/HomePage';
+import BoardPage from './pages/BoardPage';
 
 function App() {
-  useEffect(() => {
-    document.title = 'Trello';
-  }, []);
   return (
     <Router>
-      <div className="App">
+      <div className="w-full h-screen overflow-hidden">
         <Routes>
-          {publicRoutes.map((route, index) => {
-            const Page = route.component;
-            return (
-              <Route
-                key={index}
-                path={route.path}
-                element={
-                  // <DefaultLayout>
-                  <Page />
-                  // </DefaultLayout>
-                }
-              />
-            );
-          })}
+          <Route path="/" element={<Navigate to="/boards" replace />} />
+          <Route path="/boards" element={<HomePage />} />
+          <Route path="/templates" element={<HomePage />} />
+          <Route path="/board/:id" element={<BoardPage />} />
         </Routes>
       </div>
     </Router>
