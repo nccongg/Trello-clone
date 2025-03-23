@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { PlusIcon, XMarkIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
-import { useBoardStore, List as ListType } from '../store/boardStore';
+import { useBoardStore } from '../store/boardStore';
+import type { List as ListType, Card as CardType } from '../store/boardStore';
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import Card from './Card';
@@ -85,6 +86,18 @@ export default function List({ boardId, list }: ListProps) {
     setIsCollapsed(!isCollapsed);
   };
 
+  const getBackgroundStyle = () => {
+    const bg = list.background || '#101204';
+    if (bg.startsWith('http')) {
+      return {
+        backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)), url(${bg})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      };
+    }
+    return { backgroundColor: bg };
+  };
+
   return (
     <div
       ref={listRef}
@@ -96,7 +109,7 @@ export default function List({ boardId, list }: ListProps) {
     >
       <div
         className={`transition-all duration-200 rounded-xl ${isCollapsed ? 'p-1.5' : 'p-2.5'}`}
-        style={{ backgroundColor: list.background || '#101204' }}
+        style={getBackgroundStyle()}
       >
         {isCollapsed ? (
           <div className="h-full flex flex-col justify-between items-center py-1.5">
@@ -131,7 +144,7 @@ export default function List({ boardId, list }: ListProps) {
                 </form>
               ) : (
                 <h3
-                  className="text-sm font-medium text-[#B6C2CF] px-2 py-1 cursor-pointer hover:bg-[#A6C5E229] rounded min-w-[178px]"
+                  className="text-sm font-medium text-white px-2 py-1 cursor-pointer hover:bg-[#A6C5E229] rounded min-w-[178px]"
                   onClick={() => setIsEditingTitle(true)}
                 >
                   {list.title}
@@ -156,7 +169,7 @@ export default function List({ boardId, list }: ListProps) {
 
             <div ref={setNodeRef} className="cards-container space-y-2 min-h-[1px]">
               <SortableContext items={list.cards.map((card) => card.id)} strategy={verticalListSortingStrategy}>
-                {list.cards.map((card, index) => (
+                {list.cards.map((card: CardType, index: number) => (
                   <Card key={card.id} index={index} card={card} boardId={boardId} listId={list.id} />
                 ))}
               </SortableContext>

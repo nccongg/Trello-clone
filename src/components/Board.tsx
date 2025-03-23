@@ -28,7 +28,12 @@ export default function Board({ id }: BoardProps) {
   const [activeCard, setActiveCard] = useState<any>(null);
 
   const sensors = useSensors(
-    useSensor(PointerSensor),
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        delay: 100,
+        tolerance: 5,
+      },
+    }),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     }),
@@ -189,7 +194,7 @@ export default function Board({ id }: BoardProps) {
             ) : (
               <button
                 onClick={() => setIsAddingList(true)}
-                className="w-full flex items-center px-3 py-2 bg-[#A6C5E229] hover:bg-[#A6C5E240] text-[#9FADBC] hover:text-[#B6C2CF] rounded-xl text-sm"
+                className="w-full flex items-center px-3 py-2 bg-[#22272B] hover:bg-[#454F59] text-white rounded-xl text-sm"
               >
                 <PlusIcon className="w-4 h-4 mr-1" />
                 Add another list

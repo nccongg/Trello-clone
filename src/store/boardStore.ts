@@ -1,30 +1,9 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
+import type { Board, List, Card, Activity } from '../types';
 
-export interface Card {
-  id: string;
-  title: string;
-  description?: string;
-  isCompleted?: boolean;
-}
-
-export interface List {
-  id: string;
-  title: string;
-  cards: Card[];
-  background?: string;
-}
-
-export interface Board {
-  id: string;
-  title: string;
-  description?: string;
-  background: string;
-  members?: string[];
-  lists: List[];
-  isStarred?: boolean;
-}
+export type { List, Card };
 
 interface BoardStore {
   boards: Board[];
@@ -42,7 +21,28 @@ interface BoardStore {
   updateListTitle: (boardId: string, listId: string, title: string) => void;
   toggleCardComplete: (boardId: string, listId: string, cardId: string) => void;
   updateCardTitle: (boardId: string, listId: string, cardId: string, title: string) => void;
+  toggleCardWatching: (boardId: string, listId: string, cardId: string) => void;
+  updateCardDescription: (boardId: string, listId: string, cardId: string, description: string) => void;
+  addComment: (boardId: string, listId: string, cardId: string, content: string) => void;
+  updateComment: (boardId: string, listId: string, cardId: string, commentId: string, content: string) => void;
+  deleteComment: (boardId: string, listId: string, cardId: string, commentId: string) => void;
 }
+
+const addActivity = (card: Card, type: Activity['type'], data: Activity['data'] = {}) => {
+  const activity: Activity = {
+    id: uuidv4(),
+    type,
+    data,
+    createdAt: Date.now(),
+    userId: 'user1',
+    userName: 'Chí Công Nguyễn',
+  };
+
+  return {
+    ...card,
+    activities: [...(card.activities || []), activity],
+  };
+};
 
 export const useBoardStore = create<BoardStore>()(
   persist(
@@ -92,23 +92,37 @@ export const useBoardStore = create<BoardStore>()(
           ),
         })),
       addCard: (boardId, listId, title) =>
-        set((state) => ({
-          boards: state.boards.map((board) =>
-            board.id === boardId
-              ? {
-                  ...board,
-                  lists: board.lists.map((list) =>
-                    list.id === listId
-                      ? {
-                          ...list,
-                          cards: [...list.cards, { id: uuidv4(), title }],
-                        }
-                      : list,
-                  ),
-                }
-              : board,
-          ),
-        })),
+        set((state) => {
+          const newCard = addActivity(
+            {
+              id: uuidv4(),
+              title,
+              isCompleted: false,
+              createdAt: Date.now(),
+              activities: [],
+            },
+            'add',
+            { to: 'To do' },
+          );
+
+          return {
+            boards: state.boards.map((board) =>
+              board.id === boardId
+                ? {
+                    ...board,
+                    lists: board.lists.map((list) =>
+                      list.id === listId
+                        ? {
+                            ...list,
+                            cards: [...list.cards, newCard],
+                          }
+                        : list,
+                    ),
+                  }
+                : board,
+            ),
+          };
+        }),
       removeCard: (boardId, listId, cardId) =>
         set((state) => ({
           boards: state.boards.map((board) =>
@@ -129,55 +143,99 @@ export const useBoardStore = create<BoardStore>()(
         })),
       moveCard: (boardId, fromListId, fromIndex, toListId, toIndex) =>
         set((state) => {
-          const board = state.boards.find((b) => b.id === boardId);
-          if (!board) return state;
+          try {
+            const board = state.boards.find((b) => b.id === boardId);
+            if (!board) return state;
 
-          const fromList = board.lists.find((l) => l.id === fromListId);
-          const toList = board.lists.find((l) => l.id === toListId);
-          if (!fromList || !toList) return state;
+            const fromList = board.lists.find((l) => l.id === fromListId);
+            const toList = board.lists.find((l) => l.id === toListId);
+            if (!fromList || !toList) return state;
 
-          const newCards = [...fromList.cards];
-          const [movedCard] = newCards.splice(fromIndex, 1);
+            // Safety check for invalid indices
+            if (
+              fromIndex < 0 ||
+              fromIndex >= fromList.cards.length ||
+              toIndex < 0 ||
+              toIndex > (fromListId === toListId ? fromList.cards.length - 1 : toList.cards.length)
+            ) {
+              return state;
+            }
 
-          // Moving to a different list
-          if (fromListId !== toListId) {
             const newFromCards = [...fromList.cards];
             const [movedCard] = newFromCards.splice(fromIndex, 1);
-            const newToCards = [...toList.cards];
-            newToCards.splice(toIndex, 0, movedCard);
+
+            // Safety check for corrupted card data
+            if (!movedCard || !movedCard.id) {
+              console.error('Invalid card data during move operation');
+              return state;
+            }
+
+            // Moving to a different list
+            if (fromListId !== toListId) {
+              const newToCards = [...toList.cards];
+              const updatedCard = addActivity(
+                {
+                  ...movedCard,
+                  activities: movedCard.activities || [],
+                },
+                'move',
+                {
+                  from: fromList.title,
+                  to: toList.title,
+                },
+              );
+              newToCards.splice(toIndex, 0, updatedCard);
+
+              return {
+                boards: state.boards.map((board) =>
+                  board.id === boardId
+                    ? {
+                        ...board,
+                        lists: board.lists.map((list) => {
+                          if (list.id === fromListId) {
+                            return { ...list, cards: newFromCards };
+                          }
+                          if (list.id === toListId) {
+                            return { ...list, cards: newToCards };
+                          }
+                          return list;
+                        }),
+                      }
+                    : board,
+                ),
+              };
+            }
+
+            // Moving within the same list
+            const updatedCard = addActivity(
+              {
+                ...movedCard,
+                activities: movedCard.activities || [],
+              },
+              'move',
+              {
+                from: `position ${fromIndex + 1}`,
+                to: `position ${toIndex + 1}`,
+              },
+            );
+            newFromCards.splice(toIndex, 0, updatedCard);
 
             return {
               boards: state.boards.map((board) =>
                 board.id === boardId
                   ? {
                       ...board,
-                      lists: board.lists.map((list) => {
-                        if (list.id === fromListId) {
-                          return { ...list, cards: newFromCards };
-                        }
-                        if (list.id === toListId) {
-                          return { ...list, cards: newToCards };
-                        }
-                        return list;
-                      }),
+                      lists: board.lists.map((list) =>
+                        list.id === fromListId ? { ...list, cards: newFromCards } : list,
+                      ),
                     }
                   : board,
               ),
             };
+          } catch (error) {
+            console.error('Error during card move:', error);
+            return state;
           }
-
-          // Moving within the same list
-          newCards.splice(toIndex, 0, movedCard);
-          return {
-            boards: state.boards.map((board) =>
-              board.id === boardId
-                ? {
-                    ...board,
-                    lists: board.lists.map((list) => (list.id === fromListId ? { ...list, cards: newCards } : list)),
-                  }
-                : board,
-            ),
-          };
         }),
       toggleStar: (boardId) =>
         set((state) => ({
@@ -232,7 +290,11 @@ export const useBoardStore = create<BoardStore>()(
                       ? {
                           ...list,
                           cards: list.cards.map((card) =>
-                            card.id === cardId ? { ...card, isCompleted: !card.isCompleted } : card,
+                            card.id === cardId
+                              ? addActivity({ ...card, isCompleted: !card.isCompleted }, 'complete', {
+                                  value: (!card.isCompleted).toString(),
+                                })
+                              : card,
                           ),
                         }
                       : list,
@@ -252,6 +314,140 @@ export const useBoardStore = create<BoardStore>()(
                       ? {
                           ...list,
                           cards: list.cards.map((card) => (card.id === cardId ? { ...card, title } : card)),
+                        }
+                      : list,
+                  ),
+                }
+              : board,
+          ),
+        })),
+      toggleCardWatching: (boardId, listId, cardId) =>
+        set((state) => ({
+          boards: state.boards.map((board) =>
+            board.id === boardId
+              ? {
+                  ...board,
+                  lists: board.lists.map((list) =>
+                    list.id === listId
+                      ? {
+                          ...list,
+                          cards: list.cards.map((card) =>
+                            card.id === cardId ? { ...card, isWatching: !card.isWatching } : card,
+                          ),
+                        }
+                      : list,
+                  ),
+                }
+              : board,
+          ),
+        })),
+      updateCardDescription: (boardId, listId, cardId, description) =>
+        set((state) => ({
+          boards: state.boards.map((board) =>
+            board.id === boardId
+              ? {
+                  ...board,
+                  lists: board.lists.map((list) =>
+                    list.id === listId
+                      ? {
+                          ...list,
+                          cards: list.cards.map((card) =>
+                            card.id === cardId
+                              ? addActivity({ ...card, description }, 'description', { value: description })
+                              : card,
+                          ),
+                        }
+                      : list,
+                  ),
+                }
+              : board,
+          ),
+        })),
+      addComment: (boardId, listId, cardId, content) =>
+        set((state) => ({
+          boards: state.boards.map((board) =>
+            board.id === boardId
+              ? {
+                  ...board,
+                  lists: board.lists.map((list) =>
+                    list.id === listId
+                      ? {
+                          ...list,
+                          cards: list.cards.map((card) =>
+                            card.id === cardId
+                              ? {
+                                  ...card,
+                                  comments: [
+                                    ...(card.comments || []),
+                                    {
+                                      id: uuidv4(),
+                                      content,
+                                      userId: 'user1',
+                                      userName: 'Chí Công Nguyễn',
+                                      createdAt: Date.now(),
+                                    },
+                                  ],
+                                }
+                              : card,
+                          ),
+                        }
+                      : list,
+                  ),
+                }
+              : board,
+          ),
+        })),
+      updateComment: (boardId, listId, cardId, commentId, content) =>
+        set((state) => ({
+          boards: state.boards.map((board) =>
+            board.id === boardId
+              ? {
+                  ...board,
+                  lists: board.lists.map((list) =>
+                    list.id === listId
+                      ? {
+                          ...list,
+                          cards: list.cards.map((card) =>
+                            card.id === cardId
+                              ? {
+                                  ...card,
+                                  comments: card.comments?.map((comment) =>
+                                    comment.id === commentId
+                                      ? {
+                                          ...comment,
+                                          content,
+                                          updatedAt: Date.now(),
+                                        }
+                                      : comment,
+                                  ),
+                                }
+                              : card,
+                          ),
+                        }
+                      : list,
+                  ),
+                }
+              : board,
+          ),
+        })),
+      deleteComment: (boardId, listId, cardId, commentId) =>
+        set((state) => ({
+          boards: state.boards.map((board) =>
+            board.id === boardId
+              ? {
+                  ...board,
+                  lists: board.lists.map((list) =>
+                    list.id === listId
+                      ? {
+                          ...list,
+                          cards: list.cards.map((card) =>
+                            card.id === cardId
+                              ? {
+                                  ...card,
+                                  comments: card.comments?.filter((comment) => comment.id !== commentId),
+                                }
+                              : card,
+                          ),
                         }
                       : list,
                   ),

@@ -36,6 +36,19 @@ export default function ListActions({ onClose, boardId, listId }: ListActionsPro
     '#596773', // Dark gray
   ];
 
+  const images = [
+    'https://images.unsplash.com/photo-1454496522488-7a8e488e8606',
+    'https://images.unsplash.com/photo-1526749837599-b4eba9fd855e',
+    'https://images.unsplash.com/photo-1507525428034-b723cf961d3e',
+    'https://images.unsplash.com/photo-1471922694854-ff1b63b20054',
+    'https://images.unsplash.com/photo-1519681393784-d120267933ba',
+    'https://images.unsplash.com/photo-1682686580003-82838abaa108',
+    'https://images.unsplash.com/photo-1682686580186-b55d2a91053c',
+    'https://images.unsplash.com/photo-1682685797507-d44d838b0ac7',
+    'https://images.unsplash.com/photo-1682685797365-6f57bbebf107',
+    'https://images.unsplash.com/photo-1682685796766-0fddd3e480de',
+  ];
+
   return (
     <Menu as="div" className="relative">
       <Menu.Button className="p-1.5 text-[#9FADBC] hover:bg-[#A6C5E229] rounded-lg">
@@ -110,7 +123,7 @@ export default function ListActions({ onClose, boardId, listId }: ListActionsPro
           <div className="border-t border-[#A6C5E229] mt-1">
             <div className="px-4 py-2">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-[#B6C2CF]">Change list color</span>
+                <span className="text-sm text-[#B6C2CF]">Colors</span>
               </div>
               <div className="grid grid-cols-5 gap-2 mt-2">
                 {colors.map((color, index) => (
@@ -122,13 +135,30 @@ export default function ListActions({ onClose, boardId, listId }: ListActionsPro
                   />
                 ))}
               </div>
+
+              <div className="flex items-center justify-between mt-4">
+                <span className="text-sm text-[#B6C2CF]">Photos</span>
+              </div>
+              <div className="grid grid-cols-5 gap-2 mt-2">
+                {images.map((image, index) => (
+                  <button
+                    key={index}
+                    className={`w-10 h-7 rounded bg-cover bg-center ${
+                      image === currentBackground ? 'ring-2 ring-white' : ''
+                    }`}
+                    style={{ backgroundImage: `url(${image}?auto=format&fit=crop&w=40&h=28&q=80)` }}
+                    onClick={() => handleColorChange(image)}
+                  />
+                ))}
+              </div>
+
               <button
-                className={`w-full mt-2 py-1 text-sm text-[#B6C2CF] hover:bg-[#A6C5E229] rounded ${
+                className={`w-full mt-4 py-1 text-sm text-[#B6C2CF] hover:bg-[#A6C5E229] rounded ${
                   currentBackground === '#101204' ? 'bg-[#A6C5E229]' : ''
                 }`}
                 onClick={() => handleColorChange('#101204')}
               >
-                × Remove color
+                × Remove background
               </button>
             </div>
           </div>
