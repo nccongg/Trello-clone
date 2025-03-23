@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { PlusIcon, XMarkIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 import { useBoardStore, List as ListType } from '../store/boardStore';
+import { useDroppable } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import Card from './Card';
 import ListActions from './ListActions';
 
@@ -20,6 +22,15 @@ export default function List({ boardId, list }: ListProps) {
   const listRef = useRef<HTMLDivElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const addCardRef = useRef<HTMLDivElement>(null);
+
+  const { setNodeRef } = useDroppable({
+    id: list.id,
+    data: {
+      type: 'List',
+      list,
+      boardId,
+    },
+  });
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -143,10 +154,12 @@ export default function List({ boardId, list }: ListProps) {
               </div>
             </div>
 
-            <div className="cards-container space-y-2 min-h-[1px]">
-              {list.cards.map((card, index) => (
-                <Card key={card.id} index={index} card={card} boardId={boardId} listId={list.id} />
-              ))}
+            <div ref={setNodeRef} className="cards-container space-y-2 min-h-[1px]">
+              <SortableContext items={list.cards.map((card) => card.id)} strategy={verticalListSortingStrategy}>
+                {list.cards.map((card, index) => (
+                  <Card key={card.id} index={index} card={card} boardId={boardId} listId={list.id} />
+                ))}
+              </SortableContext>
             </div>
 
             {isAddingCard ? (

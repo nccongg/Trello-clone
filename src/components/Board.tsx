@@ -1,130 +1,213 @@
-import { useState, useEffect } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import { PlusIcon } from '@heroicons/react/24/outline';
 import { useBoardStore } from '../store/boardStore';
 import List from './List';
-import Card from './Card';
+import {
+  DndContext,
+  DragOverlay,
+  DragStartEvent,
+  DragEndEvent,
+  DragOverEvent,
+  useSensor,
+  useSensors,
+  PointerSensor,
+  KeyboardSensor,
+} from '@dnd-kit/core';
+import { arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
 
 interface BoardProps {
   id: string;
 }
 
 export default function Board({ id }: BoardProps) {
-  const { getBoard, moveCard } = useBoardStore();
-  const board = getBoard(id);
+  const [newListTitle, setNewListTitle] = useState('');
+  const [isAddingList, setIsAddingList] = useState(false);
+  const { boards, addList, moveCard } = useBoardStore();
+  const board = boards.find((b) => b.id === id);
+  const addListRef = useRef<HTMLDivElement>(null);
+  const [activeCard, setActiveCard] = useState<any>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
+  );
 
   useEffect(() => {
-    const handleDragStart = function (this: HTMLElement, e: DragEvent) {
-      this.classList.add('dragging');
-      const listId = this.closest('.list')?.getAttribute('data-list-id');
-      const cardContainer = this.closest('.cards-container');
-      if (cardContainer) {
-        const index = Array.from(cardContainer.children).indexOf(this);
-        e.dataTransfer?.setData('text/plain', JSON.stringify({ listId, index }));
+    const handleClickOutside = (event: MouseEvent) => {
+      if (addListRef.current && !addListRef.current.contains(event.target as Node)) {
+        setIsAddingList(false);
+        setNewListTitle('');
       }
     };
 
-    const handleDragEnd = function (this: HTMLElement) {
-      this.classList.remove('dragging');
-    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
-    const handleDragOver = function (this: HTMLElement, e: DragEvent) {
-      e.preventDefault();
-      e.stopPropagation();
+  const handleAddList = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newListTitle.trim()) {
+      addList(id, newListTitle.trim());
+      setNewListTitle('');
+      setIsAddingList(false);
+    }
+  };
 
-      const draggingCard = document.querySelector<HTMLElement>('.dragging');
-      if (!draggingCard) return;
+  const handleDragStart = (event: DragStartEvent) => {
+    if (event.active.data.current?.type === 'Card') {
+      setActiveCard(event.active.data.current.card);
+    }
+  };
 
-      const afterCard = getDragAfterElement(this, e.clientY);
-      if (afterCard) {
-        this.insertBefore(draggingCard, afterCard);
-      } else {
-        this.appendChild(draggingCard);
+  const handleDragEnd = (event: DragEndEvent) => {
+    setActiveCard(null);
+    const { active, over } = event;
+
+    if (!over) return;
+
+    const activeCard = active.data.current;
+    const overCard = over.data.current;
+
+    if (!activeCard || !overCard) return;
+
+    const isActiveACard = activeCard.type === 'Card';
+    const isOverACard = overCard.type === 'Card';
+
+    if (!isActiveACard) return;
+
+    // Dropping a card over another card
+    if (isActiveACard && isOverACard) {
+      const activeListId = activeCard.listId;
+      const overListId = overCard.listId;
+      const activeIndex = activeCard.index;
+      const overIndex = overCard.index;
+
+      // Same list
+      if (activeListId === overListId) {
+        moveCard(id, activeListId, activeIndex, overListId, overIndex);
       }
-    };
-
-    const handleDrop = function (this: HTMLElement, e: DragEvent) {
-      e.preventDefault();
-      e.stopPropagation();
-
-      const draggingCard = document.querySelector<HTMLElement>('.dragging');
-      if (!draggingCard) return;
-
-      const data = e.dataTransfer?.getData('text/plain');
-      if (!data) return;
-
-      const { listId: fromListId, index: fromIndex } = JSON.parse(data);
-      const toListId = this.closest('.list')?.getAttribute('data-list-id');
-      if (!toListId) return;
-
-      const toIndex = Array.from(this.children).indexOf(draggingCard);
-
-      if (fromListId !== toListId || fromIndex !== toIndex) {
-        moveCard(id, fromListId, toListId, fromIndex, toIndex);
+      // Different lists
+      else {
+        moveCard(id, activeListId, activeIndex, overListId, overIndex);
       }
-    };
-
-    function getDragAfterElement(container: HTMLElement, y: number): HTMLElement | null {
-      const draggableElements = [...container.querySelectorAll<HTMLElement>('.card:not(.dragging)')];
-
-      if (draggableElements.length === 0) return null;
-
-      let closestCard = draggableElements[0];
-      let closestOffset = Number.NEGATIVE_INFINITY;
-
-      draggableElements.forEach((card) => {
-        const box = card.getBoundingClientRect();
-        const offset = y - box.top - box.height / 2;
-
-        if (offset < 0 && offset > closestOffset) {
-          closestOffset = offset;
-          closestCard = card;
-        }
-      });
-
-      return closestOffset === Number.NEGATIVE_INFINITY ? null : closestCard;
     }
 
-    // Add event listeners
-    document.querySelectorAll<HTMLElement>('.card').forEach((card) => {
-      card.addEventListener('dragstart', handleDragStart);
-      card.addEventListener('dragend', handleDragEnd);
-    });
+    // Dropping a card over a list
+    if (isActiveACard && overCard.type === 'List') {
+      const activeListId = activeCard.listId;
+      const overListId = overCard.list.id;
+      const activeIndex = activeCard.index;
+      const overIndex = overCard.list.cards.length;
 
-    document.querySelectorAll<HTMLElement>('.cards-container').forEach((container) => {
-      container.addEventListener('dragover', handleDragOver);
-      container.addEventListener('drop', handleDrop);
-    });
+      if (activeListId !== overListId) {
+        moveCard(id, activeListId, activeIndex, overListId, overIndex);
+      }
+    }
+  };
 
-    // Cleanup
-    return () => {
-      document.querySelectorAll<HTMLElement>('.card').forEach((card) => {
-        card.removeEventListener('dragstart', handleDragStart);
-        card.removeEventListener('dragend', handleDragEnd);
-      });
+  const handleDragOver = (event: DragOverEvent) => {
+    const { active, over } = event;
+    if (!over) return;
 
-      document.querySelectorAll<HTMLElement>('.cards-container').forEach((container) => {
-        container.removeEventListener('dragover', handleDragOver);
-        container.removeEventListener('drop', handleDrop);
-      });
-    };
-  }, [board, id, moveCard]);
+    const activeCard = active.data.current;
+    const overCard = over.data.current;
+
+    if (!activeCard || !overCard) return;
+
+    const isActiveACard = activeCard.type === 'Card';
+    const isOverACard = overCard.type === 'Card';
+
+    if (!isActiveACard) return;
+
+    // Dropping a card over another card in a different list
+    if (isActiveACard && isOverACard) {
+      const activeListId = activeCard.listId;
+      const overListId = overCard.listId;
+      const activeIndex = activeCard.index;
+      const overIndex = overCard.index;
+
+      if (activeListId !== overListId) {
+        moveCard(id, activeListId, activeIndex, overListId, overIndex);
+      }
+    }
+
+    // Dropping a card over a list
+    if (isActiveACard && overCard.type === 'List') {
+      const activeListId = activeCard.listId;
+      const overListId = overCard.list.id;
+      const activeIndex = activeCard.index;
+      const overIndex = overCard.list.cards.length;
+
+      if (activeListId !== overListId) {
+        moveCard(id, activeListId, activeIndex, overListId, overIndex);
+      }
+    }
+  };
 
   if (!board) return null;
 
   return (
-    <div
-      className="flex-1 overflow-x-auto p-6"
-      style={{
-        backgroundImage: board.background.startsWith('http') ? `url(${board.background})` : undefined,
-        backgroundColor: !board.background.startsWith('http') ? board.background : undefined,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-      }}
-    >
-      <div className="flex gap-3">
-        {board.lists.map((list) => (
-          <List key={list.id} boardId={board.id} list={list} />
-        ))}
+    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragOver={handleDragOver}>
+      <div className="board flex-1 overflow-x-auto">
+        <div className="flex gap-2.5 p-2.5 items-start h-full">
+          {board.lists.map((list) => (
+            <List key={list.id} boardId={id} list={list} />
+          ))}
+
+          <div ref={addListRef} className="w-[272px] flex-shrink-0">
+            {isAddingList ? (
+              <form onSubmit={handleAddList} className="bg-[#101204] p-2.5 rounded-xl">
+                <input
+                  type="text"
+                  value={newListTitle}
+                  onChange={(e) => setNewListTitle(e.target.value)}
+                  placeholder="Enter list title..."
+                  className="w-full bg-[#22272B] rounded-lg px-3 py-2 text-sm text-white placeholder-[#A6C5E2] focus:outline-none"
+                  autoFocus
+                />
+                <div className="mt-2 flex items-center gap-2">
+                  <button
+                    type="submit"
+                    className="px-3 py-1.5 bg-[#579DFF] text-white rounded-lg text-sm hover:bg-[#4B8BE0]"
+                  >
+                    Add list
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddingList(false);
+                      setNewListTitle('');
+                    }}
+                    className="p-1.5 text-[#9FADBC] hover:text-[#B6C2CF] hover:bg-[#A6C5E229] rounded-lg"
+                  >
+                    <PlusIcon className="w-5 h-5" />
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <button
+                onClick={() => setIsAddingList(true)}
+                className="w-full flex items-center px-3 py-2 bg-[#A6C5E229] hover:bg-[#A6C5E240] text-[#9FADBC] hover:text-[#B6C2CF] rounded-xl text-sm"
+              >
+                <PlusIcon className="w-4 h-4 mr-1" />
+                Add another list
+              </button>
+            )}
+          </div>
+        </div>
       </div>
-    </div>
+
+      <DragOverlay>
+        {activeCard && (
+          <div className="card bg-[#22272B] rounded-lg p-1.5 shadow-lg">
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-[#B6C2CF]">{activeCard.title}</span>
+            </div>
+          </div>
+        )}
+      </DragOverlay>
+    </DndContext>
   );
 }

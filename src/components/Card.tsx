@@ -1,12 +1,18 @@
 import { useState, useRef, useEffect } from 'react';
-import { Card as CardType } from '../store/boardStore';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { CheckCircleIcon } from '@heroicons/react/24/solid';
 import { PencilIcon } from '@heroicons/react/24/outline';
 import { useBoardStore } from '../store/boardStore';
 import CardActions from './CardActions';
 
 interface CardProps {
-  card: CardType;
+  card: {
+    id: string;
+    title: string;
+    isCompleted?: boolean;
+    description?: string;
+  };
   boardId: string;
   listId: string;
   index: number;
@@ -18,9 +24,28 @@ export default function Card({ card, boardId, listId, index }: CardProps) {
   const { toggleCardComplete, updateCardTitle } = useBoardStore();
   const inputRef = useRef<HTMLInputElement>(null);
 
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: card.id,
+    data: {
+      type: 'Card',
+      card,
+      listId,
+      index,
+    },
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    zIndex: isDragging ? 100 : 'auto',
+    position: isDragging ? ('relative' as const) : ('static' as const),
+    cursor: 'grab',
+  };
+
   useEffect(() => {
     if (isEditing && inputRef.current) {
       inputRef.current.focus();
+      inputRef.current.select();
     }
   }, [isEditing]);
 
@@ -44,10 +69,13 @@ export default function Card({ card, boardId, listId, index }: CardProps) {
 
   return (
     <div
-      draggable={true}
-      data-card-id={card.id}
-      data-list-id={listId}
-      className="card group relative bg-[#22272B] hover:bg-[#282E33] rounded-lg p-1.5 cursor-pointer shadow-sm"
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className={`card group relative bg-[#22272B] hover:bg-[#282E33] rounded-lg p-1.5 shadow-sm transition-colors duration-200 ${
+        isDragging ? 'shadow-xl opacity-90 scale-105' : ''
+      }`}
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
@@ -63,7 +91,7 @@ export default function Card({ card, boardId, listId, index }: CardProps) {
                   : 'text-[#A6C5E229] opacity-0 group-hover:opacity-100 hover:text-[#4CAF50]'
               }`}
             />
-            <div className="absolute left-1/2 -translate-x-1/2 -top-8 hidden group-hover/check:block bg-[#1D2125] text-[#B6C2CF] text-xs px-2 py-1 rounded whitespace-nowrap">
+            <div className="absolute left-1/2 -translate-x-1/2 -top-8 hidden group-hover/check:block bg-[#1D2125] text-[#B6C2CF] text-xs px-2 py-1 rounded whitespace-nowrap z-50">
               {card.isCompleted ? 'Mark as incomplete' : 'Mark as complete'}
             </div>
           </div>

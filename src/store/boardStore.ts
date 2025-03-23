@@ -1,11 +1,12 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { v4 as uuidv4 } from 'uuid';
 
 export interface Card {
   id: string;
   title: string;
   description?: string;
-  isCompleted: boolean;
+  isCompleted?: boolean;
 }
 
 export interface List {
@@ -29,13 +30,13 @@ interface BoardStore {
   boards: Board[];
   lists: List[];
   getBoard: (id: string) => Board | undefined;
-  addBoard: (board: Board) => void;
+  addBoard: (title: string, background: string) => void;
   removeBoard: (id: string) => void;
   addList: (boardId: string, title: string) => void;
   removeList: (boardId: string, listId: string) => void;
   addCard: (boardId: string, listId: string, title: string) => void;
   removeCard: (boardId: string, listId: string, cardId: string) => void;
-  moveCard: (boardId: string, fromListId: string, toListId: string, fromIndex: number, toIndex: number) => void;
+  moveCard: (boardId: string, fromListId: string, fromIndex: number, toListId: string, toIndex: number) => void;
   toggleStar: (boardId: string) => void;
   updateListBackground: (boardId: string, listId: string, background: string) => void;
   updateListTitle: (boardId: string, listId: string, title: string) => void;
@@ -60,9 +61,9 @@ export const useBoardStore = create<BoardStore>()(
       getBoard: (id: string) => {
         return get().boards.find((board) => board.id === id);
       },
-      addBoard: (board) =>
+      addBoard: (title, background) =>
         set((state) => ({
-          boards: [...state.boards, { ...board, isStarred: false }],
+          boards: [...state.boards, { id: uuidv4(), title, background, lists: [], isStarred: false }],
         })),
       removeBoard: (id) =>
         set((state) => ({
@@ -74,15 +75,7 @@ export const useBoardStore = create<BoardStore>()(
             board.id === boardId
               ? {
                   ...board,
-                  lists: [
-                    ...board.lists,
-                    {
-                      id: crypto.randomUUID(),
-                      title,
-                      cards: [],
-                      background: '#101204',
-                    },
-                  ],
+                  lists: [...board.lists, { id: uuidv4(), title, cards: [] }],
                 }
               : board,
           ),
@@ -108,14 +101,7 @@ export const useBoardStore = create<BoardStore>()(
                     list.id === listId
                       ? {
                           ...list,
-                          cards: [
-                            ...list.cards,
-                            {
-                              id: crypto.randomUUID(),
-                              title,
-                              isCompleted: false,
-                            },
-                          ],
+                          cards: [...list.cards, { id: uuidv4(), title }],
                         }
                       : list,
                   ),
@@ -141,41 +127,58 @@ export const useBoardStore = create<BoardStore>()(
               : board,
           ),
         })),
-      moveCard: (boardId: string, fromListId: string, toListId: string, fromIndex: number, toIndex: number) => {
+      moveCard: (boardId, fromListId, fromIndex, toListId, toIndex) =>
         set((state) => {
-          const newBoards = state.boards.map((board) => {
-            if (board.id === boardId) {
-              const newLists = [...board.lists];
-              const fromList = newLists.find((list) => list.id === fromListId);
-              const toList = newLists.find((list) => list.id === toListId);
+          const board = state.boards.find((b) => b.id === boardId);
+          if (!board) return state;
 
-              if (!fromList || !toList) return board;
+          const fromList = board.lists.find((l) => l.id === fromListId);
+          const toList = board.lists.find((l) => l.id === toListId);
+          if (!fromList || !toList) return state;
 
-              // Get the card being moved
-              const [movedCard] = fromList.cards.splice(fromIndex, 1);
+          const newCards = [...fromList.cards];
+          const [movedCard] = newCards.splice(fromIndex, 1);
 
-              // If moving to a different list
-              if (fromListId !== toListId) {
-                toList.cards.splice(toIndex, 0, movedCard);
-              } else {
-                // If moving within the same list
-                fromList.cards.splice(toIndex, 0, movedCard);
-              }
+          // Moving to a different list
+          if (fromListId !== toListId) {
+            const newFromCards = [...fromList.cards];
+            const [movedCard] = newFromCards.splice(fromIndex, 1);
+            const newToCards = [...toList.cards];
+            newToCards.splice(toIndex, 0, movedCard);
 
-              return {
-                ...board,
-                lists: newLists,
-              };
-            }
-            return board;
-          });
+            return {
+              boards: state.boards.map((board) =>
+                board.id === boardId
+                  ? {
+                      ...board,
+                      lists: board.lists.map((list) => {
+                        if (list.id === fromListId) {
+                          return { ...list, cards: newFromCards };
+                        }
+                        if (list.id === toListId) {
+                          return { ...list, cards: newToCards };
+                        }
+                        return list;
+                      }),
+                    }
+                  : board,
+              ),
+            };
+          }
 
+          // Moving within the same list
+          newCards.splice(toIndex, 0, movedCard);
           return {
-            ...state,
-            boards: newBoards,
+            boards: state.boards.map((board) =>
+              board.id === boardId
+                ? {
+                    ...board,
+                    lists: board.lists.map((list) => (list.id === fromListId ? { ...list, cards: newCards } : list)),
+                  }
+                : board,
+            ),
           };
-        });
-      },
+        }),
       toggleStar: (boardId) =>
         set((state) => ({
           boards: state.boards.map((board) =>
@@ -218,30 +221,27 @@ export const useBoardStore = create<BoardStore>()(
               : board,
           ),
         })),
-      toggleCardComplete: (boardId: string, listId: string, cardId: string) => {
-        set((state) => {
-          const boards = state.boards.map((board) => {
-            if (board.id === boardId) {
-              const lists = board.lists.map((list) => {
-                if (list.id === listId) {
-                  const cards = list.cards.map((card) => {
-                    if (card.id === cardId) {
-                      return { ...card, isCompleted: !card.isCompleted };
-                    }
-                    return card;
-                  });
-                  return { ...list, cards };
+      toggleCardComplete: (boardId, listId, cardId) =>
+        set((state) => ({
+          boards: state.boards.map((board) =>
+            board.id === boardId
+              ? {
+                  ...board,
+                  lists: board.lists.map((list) =>
+                    list.id === listId
+                      ? {
+                          ...list,
+                          cards: list.cards.map((card) =>
+                            card.id === cardId ? { ...card, isCompleted: !card.isCompleted } : card,
+                          ),
+                        }
+                      : list,
+                  ),
                 }
-                return list;
-              });
-              return { ...board, lists };
-            }
-            return board;
-          });
-          return { ...state, boards };
-        });
-      },
-      updateCardTitle: (boardId: string, listId: string, cardId: string, title: string) => {
+              : board,
+          ),
+        })),
+      updateCardTitle: (boardId, listId, cardId, title) =>
         set((state) => ({
           boards: state.boards.map((board) =>
             board.id === boardId
@@ -258,8 +258,7 @@ export const useBoardStore = create<BoardStore>()(
                 }
               : board,
           ),
-        }));
-      },
+        })),
     }),
     {
       name: 'board-storage',
