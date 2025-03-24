@@ -14,13 +14,23 @@ interface MenuItemProps {
 }
 
 export default function ListActions({ onClose, boardId, listId }: ListActionsProps) {
-  const { boards, updateListBackground } = useBoardStore();
+  const { boards, updateListBackground, removeList, addCard } = useBoardStore();
   const board = boards.find((b) => b.id === boardId);
   const list = board?.lists.find((l) => l.id === listId);
   const currentBackground = list?.background || '#101204';
 
   const handleColorChange = (color: string) => {
     updateListBackground(boardId, listId, color);
+  };
+
+  const handleDeleteList = () => {
+    removeList(boardId, listId);
+    onClose();
+  };
+
+  const handleAddCard = () => {
+    addCard(boardId, listId, 'New card');
+    onClose();
   };
 
   const colors = [
@@ -79,7 +89,10 @@ export default function ListActions({ onClose, boardId, listId }: ListActionsPro
 
           <Menu.Item>
             {({ active }: MenuItemProps) => (
-              <button className={`${active ? 'bg-[#A6C5E229]' : ''} w-full px-4 py-2 text-left text-sm text-[#B6C2CF]`}>
+              <button
+                onClick={handleAddCard}
+                className={`${active ? 'bg-[#A6C5E229]' : ''} w-full px-4 py-2 text-left text-sm text-[#B6C2CF]`}
+              >
                 Add card
               </button>
             )}
@@ -194,6 +207,16 @@ export default function ListActions({ onClose, boardId, listId }: ListActionsPro
             {({ active }: MenuItemProps) => (
               <button className={`${active ? 'bg-[#A6C5E229]' : ''} w-full px-4 py-2 text-left text-sm text-[#B6C2CF]`}>
                 Archive all cards in this list
+              </button>
+            )}
+          </Menu.Item>
+          <Menu.Item>
+            {({ active }: MenuItemProps) => (
+              <button
+                onClick={handleDeleteList}
+                className={`${active ? 'bg-[#A6C5E229]' : ''} w-full px-4 py-2 text-left text-sm text-red-500`}
+              >
+                Delete this list
               </button>
             )}
           </Menu.Item>

@@ -306,7 +306,7 @@ export default function CardModal({ isOpen, onClose, boardId, listId, cardId }: 
                               <h3 className="text-sm font-medium text-white">Comments</h3>
                             </div>
                           </div>
-                          <div className="ml-12">
+                          <div className="ml-8 mt-5">
                             <CommentInput onSubmit={handleCommentSubmit} onTextareaInput={handleTextareaInput} />
 
                             {card.comments && card.comments.length > 0 && (
