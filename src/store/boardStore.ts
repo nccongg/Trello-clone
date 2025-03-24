@@ -2,21 +2,27 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { v4 as uuidv4 } from 'uuid';
 import type { Board, List, Card, Activity } from '../types';
+import { arrayMove } from '@dnd-kit/sortable';
 
 export type { List, Card };
 
 interface BoardStore {
   boards: Board[];
   lists: List[];
+  lastCreatedBoardId: string | null;
+  recentlyViewedBoards: string[];
   getBoard: (id: string) => Board | undefined;
   addBoard: (title: string, background: string) => void;
   removeBoard: (id: string) => void;
   addList: (boardId: string, title: string) => void;
   removeList: (boardId: string, listId: string) => void;
+  moveList: (boardId: string, fromIndex: number, toIndex: number) => void;
   addCard: (boardId: string, listId: string, title: string) => void;
   removeCard: (boardId: string, listId: string, cardId: string) => void;
   moveCard: (boardId: string, fromListId: string, fromIndex: number, toListId: string, toIndex: number) => void;
   toggleStar: (boardId: string) => void;
+  closeBoard: (boardId: string) => void;
+  reopenBoard: (boardId: string) => void;
   updateListBackground: (boardId: string, listId: string, background: string) => void;
   updateListTitle: (boardId: string, listId: string, title: string) => void;
   toggleCardComplete: (boardId: string, listId: string, cardId: string) => void;
@@ -26,6 +32,7 @@ interface BoardStore {
   addComment: (boardId: string, listId: string, cardId: string, content: string) => void;
   updateComment: (boardId: string, listId: string, cardId: string, commentId: string, content: string) => void;
   deleteComment: (boardId: string, listId: string, cardId: string, commentId: string) => void;
+  addRecentlyViewedBoard: (boardId: string) => void;
 }
 
 const addActivity = (card: Card, type: Activity['type'], data: Activity['data'] = {}) => {
@@ -55,16 +62,26 @@ export const useBoardStore = create<BoardStore>()(
           members: ['John'],
           lists: [],
           isStarred: false,
+          isClosed: false,
         },
       ],
       lists: [],
+      lastCreatedBoardId: null,
+      recentlyViewedBoards: [],
       getBoard: (id: string) => {
         return get().boards.find((board) => board.id === id);
       },
       addBoard: (title, background) =>
-        set((state) => ({
-          boards: [...state.boards, { id: uuidv4(), title, background, lists: [], isStarred: false }],
-        })),
+        set((state) => {
+          const newBoardId = uuidv4();
+          return {
+            boards: [
+              ...state.boards,
+              { id: newBoardId, title, background, lists: [], isStarred: false, isClosed: false },
+            ],
+            lastCreatedBoardId: newBoardId,
+          };
+        }),
       removeBoard: (id) =>
         set((state) => ({
           boards: state.boards.filter((board) => board.id !== id),
@@ -87,6 +104,17 @@ export const useBoardStore = create<BoardStore>()(
               ? {
                   ...board,
                   lists: board.lists.filter((list) => list.id !== listId),
+                }
+              : board,
+          ),
+        })),
+      moveList: (boardId, fromIndex, toIndex) =>
+        set((state) => ({
+          boards: state.boards.map((board) =>
+            board.id === boardId
+              ? {
+                  ...board,
+                  lists: arrayMove(board.lists, fromIndex, toIndex),
                 }
               : board,
           ),
@@ -454,6 +482,22 @@ export const useBoardStore = create<BoardStore>()(
                 }
               : board,
           ),
+        })),
+      addRecentlyViewedBoard: (boardId: string) =>
+        set((state) => {
+          const filteredBoards = state.recentlyViewedBoards.filter((id) => id !== boardId);
+          const newBoards = [boardId, ...filteredBoards];
+          return {
+            recentlyViewedBoards: newBoards.slice(0, 4),
+          };
+        }),
+      closeBoard: (boardId: string) =>
+        set((state) => ({
+          boards: state.boards.map((board) => (board.id === boardId ? { ...board, isClosed: true } : board)),
+        })),
+      reopenBoard: (boardId: string) =>
+        set((state) => ({
+          boards: state.boards.map((board) => (board.id === boardId ? { ...board, isClosed: false } : board)),
         })),
     }),
     {

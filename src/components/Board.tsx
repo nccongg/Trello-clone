@@ -14,6 +14,7 @@ import {
   KeyboardSensor,
 } from '@dnd-kit/core';
 import { arrayMove, sortableKeyboardCoordinates } from '@dnd-kit/sortable';
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 
 interface BoardProps {
   id: string;
@@ -22,16 +23,18 @@ interface BoardProps {
 export default function Board({ id }: BoardProps) {
   const [newListTitle, setNewListTitle] = useState('');
   const [isAddingList, setIsAddingList] = useState(false);
-  const { boards, addList, moveCard } = useBoardStore();
+  const { boards, addList, moveCard, moveList } = useBoardStore();
   const board = boards.find((b) => b.id === id);
   const addListRef = useRef<HTMLDivElement>(null);
   const [activeCard, setActiveCard] = useState<any>(null);
+  const [activeList, setActiveList] = useState<any>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        delay: 100,
-        tolerance: 5,
+        delay: 120,
+        tolerance: 8,
+        distance: 5,
       },
     }),
     useSensor(KeyboardSensor, {
@@ -61,33 +64,49 @@ export default function Board({ id }: BoardProps) {
   };
 
   const handleDragStart = (event: DragStartEvent) => {
-    if (event.active.data.current?.type === 'Card') {
-      setActiveCard(event.active.data.current.card);
+    const { active } = event;
+    const activeData = active.data.current;
+
+    if (activeData?.type === 'Card') {
+      setActiveCard(activeData.card);
+    } else if (activeData?.type === 'List') {
+      setActiveList(activeData.list);
     }
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
-    setActiveCard(null);
     const { active, over } = event;
+    setActiveCard(null);
+    setActiveList(null);
 
     if (!over) return;
 
-    const activeCard = active.data.current;
-    const overCard = over.data.current;
+    const activeData = active.data.current;
+    const overData = over.data.current;
 
-    if (!activeCard || !overCard) return;
+    if (!activeData || !overData) return;
 
-    const isActiveACard = activeCard.type === 'Card';
-    const isOverACard = overCard.type === 'Card';
+    const isActiveAList = activeData.type === 'List';
+    const isOverAList = overData.type === 'List';
+    const isActiveACard = activeData.type === 'Card';
+    const isOverACard = overData.type === 'Card';
 
-    if (!isActiveACard) return;
+    // Dropping a list over another list
+    if (isActiveAList && isOverAList) {
+      const activeIndex = activeData.index;
+      const overIndex = overData.index;
+
+      if (activeIndex !== overIndex) {
+        moveList(id, activeIndex, overIndex);
+      }
+    }
 
     // Dropping a card over another card
     if (isActiveACard && isOverACard) {
-      const activeListId = activeCard.listId;
-      const overListId = overCard.listId;
-      const activeIndex = activeCard.index;
-      const overIndex = overCard.index;
+      const activeListId = activeData.listId;
+      const overListId = overData.listId;
+      const activeIndex = activeData.index;
+      const overIndex = overData.index;
 
       // Same list
       if (activeListId === overListId) {
@@ -100,11 +119,11 @@ export default function Board({ id }: BoardProps) {
     }
 
     // Dropping a card over a list
-    if (isActiveACard && overCard.type === 'List') {
-      const activeListId = activeCard.listId;
-      const overListId = overCard.list.id;
-      const activeIndex = activeCard.index;
-      const overIndex = overCard.list.cards.length;
+    if (isActiveACard && overData.type === 'List') {
+      const activeListId = activeData.listId;
+      const overListId = overData.list.id;
+      const activeIndex = activeData.index;
+      const overIndex = overData.list.cards.length;
 
       if (activeListId !== overListId) {
         moveCard(id, activeListId, activeIndex, overListId, overIndex);
@@ -116,22 +135,22 @@ export default function Board({ id }: BoardProps) {
     const { active, over } = event;
     if (!over) return;
 
-    const activeCard = active.data.current;
-    const overCard = over.data.current;
+    const activeData = active.data.current;
+    const overData = over.data.current;
 
-    if (!activeCard || !overCard) return;
+    if (!activeData || !overData) return;
 
-    const isActiveACard = activeCard.type === 'Card';
-    const isOverACard = overCard.type === 'Card';
+    const isActiveACard = activeData.type === 'Card';
+    const isOverACard = overData.type === 'Card';
 
     if (!isActiveACard) return;
 
     // Dropping a card over another card in a different list
     if (isActiveACard && isOverACard) {
-      const activeListId = activeCard.listId;
-      const overListId = overCard.listId;
-      const activeIndex = activeCard.index;
-      const overIndex = overCard.index;
+      const activeListId = activeData.listId;
+      const overListId = overData.listId;
+      const activeIndex = activeData.index;
+      const overIndex = overData.index;
 
       if (activeListId !== overListId) {
         moveCard(id, activeListId, activeIndex, overListId, overIndex);
@@ -139,11 +158,11 @@ export default function Board({ id }: BoardProps) {
     }
 
     // Dropping a card over a list
-    if (isActiveACard && overCard.type === 'List') {
-      const activeListId = activeCard.listId;
-      const overListId = overCard.list.id;
-      const activeIndex = activeCard.index;
-      const overIndex = overCard.list.cards.length;
+    if (isActiveACard && overData.type === 'List') {
+      const activeListId = activeData.listId;
+      const overListId = overData.list.id;
+      const activeIndex = activeData.index;
+      const overIndex = overData.list.cards.length;
 
       if (activeListId !== overListId) {
         moveCard(id, activeListId, activeIndex, overListId, overIndex);
@@ -153,13 +172,17 @@ export default function Board({ id }: BoardProps) {
 
   if (!board) return null;
 
+  const listIds = board.lists.map((list) => list.id);
+
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd} onDragOver={handleDragOver}>
       <div className="board flex-1 overflow-x-auto">
         <div className="flex gap-2.5 p-2.5 items-start h-full">
-          {board.lists.map((list) => (
-            <List key={list.id} boardId={id} list={list} />
-          ))}
+          <SortableContext items={listIds} strategy={verticalListSortingStrategy}>
+            {board.lists.map((list, index) => (
+              <List key={list.id} boardId={id} list={list} index={index} />
+            ))}
+          </SortableContext>
 
           <div ref={addListRef} className="w-[272px] flex-shrink-0">
             {isAddingList ? (
@@ -206,10 +229,30 @@ export default function Board({ id }: BoardProps) {
 
       <DragOverlay>
         {activeCard && (
-          <div className="card bg-[#22272B] rounded-lg p-1.5 shadow-lg">
+          <div className="card bg-[#22272B] rounded-lg p-1.5 shadow-lg transform rotate-2 scale-105 transition-transform duration-200">
             <div className="flex items-center gap-2">
               <span className="text-sm text-[#B6C2CF]">{activeCard.title}</span>
             </div>
+          </div>
+        )}
+        {activeList && (
+          <div className="list bg-[#22272B] rounded-xl p-2.5 shadow-lg w-[272px] transform rotate-2 scale-105 transition-transform duration-200">
+            <div className="flex items-center justify-between mb-2.5">
+              <h3 className="text-sm font-medium text-white px-2 py-1">{activeList.title}</h3>
+            </div>
+            <div className="space-y-2">
+              {activeList.cards.map((card: any) => (
+                <div key={card.id} className="card bg-[#2D333B] rounded-lg p-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-[#B6C2CF]">{card.title}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <button className="mt-2 w-full flex items-center px-2.5 py-1.5 text-[#9FADBC] hover:bg-[#454F59] hover:text-[#B6C2CF] rounded-xl text-sm">
+              <PlusIcon className="w-4 h-4 mr-1" />
+              Add a card
+            </button>
           </div>
         )}
       </DragOverlay>

@@ -80,15 +80,8 @@ export default function CreateBoardModal({ isOpen, onClose }: CreateBoardModalPr
         ? selectedBackground.color ?? '#A33E92'
         : selectedBackground.url ?? '/backgrounds/mountain.jpg';
 
-    const newBoard = {
-      id: crypto.randomUUID(),
-      title: title.trim(),
-      background,
-      members: [],
-      lists: [],
-    };
-
-    addBoard(newBoard);
+    addBoard(title.trim(), background);
+    const newBoard = useBoardStore.getState().boards[useBoardStore.getState().boards.length - 1];
     onClose();
     setTitle('');
     setError(false);
